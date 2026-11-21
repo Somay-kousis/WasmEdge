@@ -1431,10 +1431,12 @@ bool INode::canBrowse() const noexcept {
 }
 
 WasiExpect<void> INode::updateStat() const noexcept {
-  Stat.emplace();
-  if (unlikely(::fstat(Fd, &*Stat) != 0)) {
+  struct stat Buf;
+  if (unlikely(::fstat(Fd, &Buf) != 0)) {
+    Stat.reset();
     return WasiUnexpect(fromErrNo(errno));
   }
+  Stat = Buf;
   return {};
 }
 
@@ -1502,6 +1504,9 @@ void Poller::clock(__wasi_clockid_t ClockId, __wasi_timestamp_t Timeout,
     }
   }
 
+  Timeout = std::min<__wasi_timestamp_t>(
+      Timeout, static_cast<__wasi_timestamp_t>(
+                   std::numeric_limits<decltype(kevent::data)>::max()));
   struct kevent KEvent;
   EV_SET(&KEvent, Ident, EVFILT_TIMER, EV_ADD | EV_ENABLE, FFlags, Timeout,
          &Event);
